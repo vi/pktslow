@@ -127,6 +127,12 @@ fn copy(ifr: &Iface, ifw: &Iface, del:Sender<(Instant, Vec<u8>)>) {
             for x in (monoff)..(monoff+monlen) {
                 let x = x as usize;
                 if x < buf.len() {
+                    if x % 4 == 0 {
+                        print!(" ");
+                    }
+                    if x % 16 == 0 {
+                        print!("  ");
+                    }
                     print!("{:02X}", buf[x]);
                 }
             }
@@ -143,12 +149,12 @@ fn copy(ifr: &Iface, ifw: &Iface, del:Sender<(Instant, Vec<u8>)>) {
         );
 
         if doff < l as u32 {
-            if buf[doff as usize] & dmask == dval {
+            if (buf[doff as usize] & dmask) == dval {
                 mood = true;
             }
         }
 
-        if mood {
+        if !mood {
             NONDELAYED.fetch_add(1, Ordering::Relaxed);
             let _ = ifw.send(buf);
         } else {
