@@ -39,6 +39,7 @@ enum StdinCmd {
     Monitor(Monitor),
     Stats(Stats),
     SetupMask(SetupMask),
+    DropPackets(DropPackets),
 }
 /// Exit from process
 #[derive(FromArgs)]
@@ -55,6 +56,14 @@ struct AdjustDelay {
     #[argh(positional)]
     delay_ms : u32
 }
+
+/// Drop matching packets instead of delaying them. Reset with `delay` command.
+#[derive(FromArgs)]
+#[argh(subcommand)]
+#[argh(name="drop")]
+struct DropPackets {
+}
+
 
 
 /// Print packets content to stdout
@@ -159,7 +168,12 @@ fn copy(ifr: &Iface, ifw: &Iface, del:Sender<(Instant, Vec<u8>)>) {
             let _ = ifw.send(buf);
         } else {
             DELAYED.fetch_add(1, Ordering::Relaxed);
-            let _ = del.send((Instant::now() + Duration::from_millis(DELAY.load(Ordering::Relaxed) as u64), buf.to_vec()));
+            let d = DELAY.load(Ordering::Relaxed);
+            if d != u32::MAX {
+                let _ = del.send((Instant::now() + Duration::from_millis(d as u64), buf.to_vec()));
+            } else {
+                // drop packet instead
+            }
         }
     }
 }
@@ -188,7 +202,10 @@ fn adjuster() {
                     match opt.cmd {
                         StdinCmd::Quit(_) => std::process::exit(0),
                         StdinCmd::AdjustDelay(AdjustDelay{delay_ms}) => {
-                            DELAY.store(delay_ms, Ordering::Relaxed);
+                            DELAY.store(delay_ms, Ordering::Release);
+                        }   
+                        StdinCmd::DropPackets(DropPackets{..}) => {
+                            DELAY.store(u32::MAX, Ordering::Release);
                         }
                         StdinCmd::Monitor(Monitor{
                             offset, len, max_occurs
