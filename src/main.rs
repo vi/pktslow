@@ -36,6 +36,7 @@ struct StdinOpt {
 enum StdinCmd {
     Quit(Quit),
     AdjustDelay(AdjustDelay),
+    RampDelay(RampDelay),
     Monitor(Monitor),
     Stats(Stats),
     SetupMask(SetupMask),
@@ -56,6 +57,25 @@ struct AdjustDelay {
     #[argh(positional)]
     delay_ms : u32
 }
+
+/// Ramp the delay
+#[derive(FromArgs)]
+#[argh(subcommand)]
+#[argh(name="ramp")]
+struct RampDelay {
+    /// delay milliseconds to start with
+    #[argh(positional)]
+    start_value_ms : u32,
+
+    /// for how long to ramp it
+    #[argh(positional)]
+    ramp_duration_ms : u32,
+
+    /// delay milliseconds to stop with
+    #[argh(positional)]
+    stop_value_ms : u32,
+}
+
 
 /// Drop matching packets instead of delaying them. Reset with `delay` command.
 #[derive(FromArgs)]
@@ -204,6 +224,20 @@ fn adjuster() {
                         StdinCmd::AdjustDelay(AdjustDelay{delay_ms}) => {
                             DELAY.store(delay_ms, Ordering::Release);
                         }   
+                        StdinCmd::RampDelay(RampDelay{
+                            start_value_ms,
+                            ramp_duration_ms,
+                            stop_value_ms,
+                        }) => {
+                            for x in 0..ramp_duration_ms {
+                                let x = x as f32 / ramp_duration_ms as f32;
+                                let v = (start_value_ms as f32) * (1.0-x) + (stop_value_ms as f32) * x;
+                                let v = v as u32;
+                                DELAY.store(v, Ordering::Release);
+                                std::thread::sleep(Duration::from_millis(1));
+                            }
+                            DELAY.store(stop_value_ms, Ordering::Release);
+                        }
                         StdinCmd::DropPackets(DropPackets{..}) => {
                             DELAY.store(u32::MAX, Ordering::Release);
                         }
